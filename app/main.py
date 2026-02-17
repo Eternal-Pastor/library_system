@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import check_db_connection
 
 from app.routers.auth import router as auth_router
+from app.routers.dicts import router as dicts_router
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -41,3 +42,4 @@ def create_app() -> FastAPI:
 
 app = create_app()
 app.include_router(auth_router, prefix=settings.api_prefix)
+app.include_router(dicts_router, prefix=settings.api_prefix)
