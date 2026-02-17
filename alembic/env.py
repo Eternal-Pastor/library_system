@@ -3,13 +3,13 @@ from __future__ import annotations
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 
 from app.config import settings
-from app.models import Base  # важно: импортирует модели в metadata
+from app.models import Base
+
 
 config = context.config
-
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
@@ -17,9 +17,10 @@ target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    url = settings.database_url
+    # offline режим без реального коннекта — строка ок
+    url_str = str(settings.sqlalchemy_url_obj())
     context.configure(
-        url=url,
+        url=url_str,
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
@@ -31,15 +32,13 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    # Берём базовую секцию alembic.ini, но URL подставляем из .env
-    configuration = config.get_section(config.config_ini_section) or {}
-    configuration["sqlalchemy.url"] = settings.database_url
-
-    connectable = engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
+    # online режим: создаём engine напрямую, НЕ engine_from_config
+    connectable = create_engine(
+        settings.sqlalchemy_url_obj(),   # URL object (не строка)
         poolclass=pool.NullPool,
         future=True,
+        # В редких случаях можно добавить:
+        # connect_args={"options": "-c client_encoding=UTF8"},
     )
 
     with connectable.connect() as connection:

@@ -1,12 +1,20 @@
 from __future__ import annotations
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
     """
-    App configuration loaded from environment / .env.
+    Конфиг из .env / env.
+
+    ВАЖНО:
+    - Используем DB_* параметры и формируем SQLAlchemy URL-объект (URL.create),
+      чтобы SQLAlchemy передал параметры подключению как kwargs, а не DSN-строкой.
+      Это обычно убирает UnicodeDecodeError в psycopg2/libpq на Windows.
+    - DATABASE_URL можно оставить как override, но лучше НЕ использовать,
+      пока не вылечим проблему окончательно.
     """
 
     model_config = SettingsConfigDict(
@@ -16,35 +24,54 @@ class Settings(BaseSettings):
     )
 
     # Core
-    app_name: str = Field(default="library_system")
-    environment: str = Field(default="dev")  # dev|prod
-    debug: bool = Field(default=True)
+    app_name: str = Field(default="library_system", alias="APP_NAME")
+    environment: str = Field(default="dev", alias="ENVIRONMENT")
+    debug: bool = Field(default=True, alias="DEBUG")
 
     # API
-    api_prefix: str = Field(default="/api")
+    api_prefix: str = Field(default="/api", alias="API_PREFIX")
 
-    # Database
-    database_url: str = Field(
-        default="postgresql+psycopg2://postgres:password@localhost:5432/library_db",
-        description="SQLAlchemy database URL",
-    )
-    db_echo: bool = Field(default=False)
+    # Database parts (preferred)
+    db_host: str = Field(default="localhost", alias="DB_HOST")
+    db_port: int = Field(default=5432, alias="DB_PORT")
+    db_name: str = Field(default="library_db", alias="DB_NAME")
+    db_user: str = Field(default="postgres", alias="DB_USER")
+    db_password: str = Field(default="password", alias="DB_PASSWORD")
+    db_driver: str = Field(default="psycopg2", alias="DB_DRIVER")  # psycopg2 | psycopg
+    db_echo: bool = Field(default=False, alias="DB_ECHO")
 
-    # Auth (for future JWT)
-    secret_key: str = Field(default="change_me")
-    algorithm: str = Field(default="HS256")
-    access_token_expire_minutes: int = Field(default=60)
+    # Optional override (не рекомендую при проблемах с кодировкой)
+    database_url: str | None = Field(default=None, alias="DATABASE_URL")
+
+    # Auth
+    secret_key: str = Field(default="change_me", alias="SECRET_KEY")
+    algorithm: str = Field(default="HS256", alias="ALGORITHM")
+    access_token_expire_minutes: int = Field(default=60, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
 
     # CORS
-    cors_allow_origins: str = Field(default="*")  # comma-separated or "*"
-    cors_allow_credentials: bool = Field(default=True)
+    cors_allow_origins: str = Field(default="*", alias="CORS_ALLOW_ORIGINS")
+    cors_allow_credentials: bool = Field(default=True, alias="CORS_ALLOW_CREDENTIALS")
+
+    def sqlalchemy_url_obj(self) -> URL:
+        """
+        Возвращает SQLAlchemy URL object.
+        """
+        if self.database_url:
+            # Использовать только если уверен, что строка чистая
+            return URL.create(self.database_url.strip())
+
+        return URL.create(
+            drivername=f"postgresql+{self.db_driver}",
+            username=self.db_user,
+            password=self.db_password,
+            host=self.db_host,
+            port=self.db_port,
+            database=self.db_name,
+        )
 
     def cors_origins_list(self) -> list[str]:
-        """
-        Returns a list of allowed origins. Supports "*" or comma-separated string.
-        """
         raw = (self.cors_allow_origins or "").strip()
-        if raw == "*" or raw == "":
+        if raw in ("", "*"):
             return ["*"]
         return [x.strip() for x in raw.split(",") if x.strip()]
 
