@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
+from fastapi.security import OAuth2PasswordRequestForm
 from app.database import get_db
 from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse
 from app.schemas.user import UserPublic
@@ -25,8 +25,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> UserPub
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    user = authenticate(db, payload.login, payload.password)
+def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)) -> TokenResponse:
+    user = authenticate(db, form.username, form.password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid login or password")
 

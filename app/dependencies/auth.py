@@ -11,7 +11,6 @@ from app.models.user import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_prefix}/auth/login")
 
-
 def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
