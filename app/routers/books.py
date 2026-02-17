@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.rbac import require_roles
-from app.models.book import Book, BookCard
+from app.models.book import BookCard
 from app.schemas.books import (
     BookCreateRequest,
     BookOut,
@@ -80,26 +80,25 @@ def create_book_with_draft(
     current_user: User = Depends(get_current_user),
 ) -> PublishedBookView:
     try:
-        with db.begin():
-            book = create_book(db, isbn=book_payload.isbn)
-            card = create_draft_card(
-                db,
-                book_id=book.id,
-                created_by=current_user.id,
-                title=card_payload.title,
-                subtitle=card_payload.subtitle,
-                description=card_payload.description,
-                language=card_payload.language,
-                publish_year=card_payload.publish_year,
-                publisher_id=card_payload.publisher_id,
-                cover_url=card_payload.cover_url,
-                author_ids=card_payload.author_ids,
-                genre_ids=card_payload.genre_ids,
-            )
-        # draft не публикуется, поэтому PublishedBookView тут условный:
-        # возвращаем book + card (draft) тем, кто создал
+        book = create_book(db, isbn=book_payload.isbn)
+        card = create_draft_card(
+            db,
+            book_id=book.id,
+            created_by=current_user.id,
+            title=card_payload.title,
+            subtitle=card_payload.subtitle,
+            description=card_payload.description,
+            language=card_payload.language,
+            publish_year=card_payload.publish_year,
+            publisher_id=card_payload.publisher_id,
+            cover_url=card_payload.cover_url,
+            author_ids=card_payload.author_ids,
+            genre_ids=card_payload.genre_ids,
+        )
+        # commit выполнит get_db() после выхода из эндпоинта
         return PublishedBookView(book=BookOut.model_validate(book), card=_card_to_out(card))
     except ValueError as e:
+        # rollback тоже сделает get_db()
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -130,8 +129,7 @@ def patch_draft_card(
         raise HTTPException(status_code=404, detail="Card not found")
 
     try:
-        with db.begin():
-            card = update_draft_card(db, card=card, patch=payload.model_dump(exclude_unset=True))
+        card = update_draft_card(db, card=card, patch=payload.model_dump(exclude_unset=True))
         return _card_to_out(card)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -148,8 +146,7 @@ def submit_card(card_id: uuid.UUID, db: Session = Depends(get_db)) -> BookCardOu
         raise HTTPException(status_code=404, detail="Card not found")
 
     try:
-        with db.begin():
-            card = submit_card_for_review(db, card=card)
+        card = submit_card_for_review(db, card=card)
         return _card_to_out(card)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -162,14 +159,17 @@ def submit_card(card_id: uuid.UUID, db: Session = Depends(get_db)) -> BookCardOu
     response_model=BookCardOut,
     dependencies=[Depends(require_roles("admin"))],
 )
-def publish(card_id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> BookCardOut:
+def publish(
+    card_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookCardOut:
     card = db.query(BookCard).filter(BookCard.id == card_id).one_or_none()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
 
     try:
-        with db.begin():
-            card = publish_card(db, card=card, reviewer_id=current_user.id)
+        card = publish_card(db, card=card, reviewer_id=current_user.id)
         return _card_to_out(card)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -180,14 +180,18 @@ def publish(card_id: uuid.UUID, db: Session = Depends(get_db), current_user: Use
     response_model=BookCardOut,
     dependencies=[Depends(require_roles("admin"))],
 )
-def reject(card_id: uuid.UUID, payload: ModerationReject, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> BookCardOut:
+def reject(
+    card_id: uuid.UUID,
+    payload: ModerationReject,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookCardOut:
     card = db.query(BookCard).filter(BookCard.id == card_id).one_or_none()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
 
     try:
-        with db.begin():
-            card = reject_card_to_draft(db, card=card, reviewer_id=current_user.id, reason=payload.reason)
+        card = reject_card_to_draft(db, card=card, reviewer_id=current_user.id, reason=payload.reason)
         return _card_to_out(card)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

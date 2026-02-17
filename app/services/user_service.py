@@ -22,6 +22,10 @@ def create_user(db: Session, login: str, password: str, full_name: str) -> User:
         roles=[user_role],
     )
     db.add(user)
-    db.commit()
+
+    # чтобы сразу получить user.id без commit
+    db.flush()
+    # refresh не обязателен, но можно оставить — он работает и до commit
     db.refresh(user)
+
     return user

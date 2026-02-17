@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy.engine import URL
-
+from sqlalchemy.engine import URL, make_url
 
 class Settings(BaseSettings):
     """
