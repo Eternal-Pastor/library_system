@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import check_db_connection
 
+from app.routers.auth import router as auth_router
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -39,3 +40,4 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+app.include_router(auth_router, prefix=settings.api_prefix)
